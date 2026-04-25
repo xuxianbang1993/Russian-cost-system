@@ -54,26 +54,39 @@ export async function createProduct(
   return productRowToEntity(row);
 }
 
-export async function updateProduct(id: string, data: ProductUpdateInput): Promise<void> {
+export async function updateProduct(
+  userId: string,
+  id: string,
+  data: ProductUpdateInput
+): Promise<Product> {
   const supabase = await createClient();
   const payload: ProductUpdate = {
     ...productEntityToRow(data),
     updated_at: new Date().toISOString(),
   };
-  const { error } = await supabase
+  const { data: row, error } = await supabase
     .from('products')
     .update(payload)
-    .eq('id', id);
+    .eq('id', id)
+    .eq('user_id', userId)
+    .select('*')
+    .single();
 
   if (error) throw new Error(error.message);
+  const product = productRowToEntity(row);
+  if (!product) throw new Error('商品更新失败');
+  return product;
 }
 
-export async function deleteProduct(id: string): Promise<void> {
+export async function deleteProduct(userId: string, id: string): Promise<void> {
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('products')
     .delete()
-    .eq('id', id);
+    .eq('id', id)
+    .eq('user_id', userId)
+    .select('id');
 
   if (error) throw new Error(error.message);
+  if (!data || data.length === 0) throw new Error('商品不存在或无权删除');
 }

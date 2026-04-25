@@ -58,12 +58,13 @@ export async function signUp(formData: FormData): Promise<AuthActionResult> {
   redirect('/login?success=registered');
 }
 
-export async function signOut(): Promise<AuthActionResult> {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function signOut(_formData?: FormData): Promise<void> {
   const supabase = await createClient();
   const { error } = await supabase.auth.signOut();
 
   if (error) {
-    return { error: error.message };
+    redirect('/login?error=signout');
   }
 
   redirect('/login?success=signed-out');

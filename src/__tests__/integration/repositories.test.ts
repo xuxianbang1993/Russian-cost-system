@@ -376,9 +376,21 @@ describe('product repository', () => {
       products: { data: productRow, error: null },
     });
 
-    await updateProduct('product-1', {
+    await expect(updateProduct('user-1', 'product-1', {
       declaredCost: 300,
       shippingMethod: 'east',
+    })).resolves.toEqual({
+      id: 'product-1',
+      name: 'Desk Lamp',
+      emoji: 'L',
+      platformPrice: 599.5,
+      declaredCost: 280.5,
+      purchaseCost: 120.25,
+      volume: 0,
+      weight: 0,
+      dutyRate: 0.12,
+      platformFeeRate: 0.19,
+      shippingMethod: 'standard',
     });
 
     expect(builders.get('products')?.update).toHaveBeenCalledWith(
@@ -387,17 +399,43 @@ describe('product repository', () => {
         shipping_method: 'east',
       })
     );
+    expect(builders.get('products')?.eq).toHaveBeenCalledWith('id', 'product-1');
+    expect(builders.get('products')?.eq).toHaveBeenCalledWith('user_id', 'user-1');
+    expect(builders.get('products')?.select).toHaveBeenCalledWith('*');
+    expect(builders.get('products')?.single).toHaveBeenCalledTimes(1);
   });
 
-  it('deletes a product by id', async () => {
-    const { builders } = setupClient({
+  it('throws when product update affects no rows', async () => {
+    setupClient({
       products: { data: null, error: null },
     });
 
-    await deleteProduct('product-1');
+    await expect(updateProduct('user-1', 'missing-product', {
+      declaredCost: 300,
+    })).rejects.toThrow('商品更新失败');
+  });
+
+  it('deletes a product by user id and product id', async () => {
+    const { builders } = setupClient({
+      products: { data: [{ id: 'product-1' }], error: null },
+    });
+
+    await deleteProduct('user-1', 'product-1');
 
     expect(builders.get('products')?.delete).toHaveBeenCalledTimes(1);
     expect(builders.get('products')?.eq).toHaveBeenCalledWith('id', 'product-1');
+    expect(builders.get('products')?.eq).toHaveBeenCalledWith('user_id', 'user-1');
+    expect(builders.get('products')?.select).toHaveBeenCalledWith('id');
+  });
+
+  it('throws when product delete affects no rows', async () => {
+    setupClient({
+      products: { data: [], error: null },
+    });
+
+    await expect(deleteProduct('user-1', 'missing-product')).rejects.toThrow(
+      '商品不存在或无权删除'
+    );
   });
 });
 
