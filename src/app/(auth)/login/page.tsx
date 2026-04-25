@@ -1,28 +1,9 @@
 import Link from 'next/link';
 
-import { signIn } from '@/app/actions/auth';
 import { AuthCard } from '@/components/auth/AuthCard';
-import { AuthForm } from '@/components/auth/AuthForm';
-import { loginSchema } from '@/lib/schemas/auth';
+import { LoginForm } from '@/components/auth/LoginForm';
 
 export const dynamic = 'force-dynamic';
-
-const LOGIN_FIELDS = [
-  {
-    name: 'email',
-    label: '邮箱',
-    type: 'email',
-    placeholder: 'you@company.com',
-    autoComplete: 'email',
-  },
-  {
-    name: 'password',
-    label: '密码',
-    type: 'password',
-    placeholder: '请输入登录密码',
-    autoComplete: 'current-password',
-  },
-] as const;
 
 export default async function LoginPage({
   searchParams,
@@ -44,14 +25,7 @@ export default async function LoginPage({
       }
       title="登录系统"
     >
-      <AuthForm
-        fields={LOGIN_FIELDS}
-        initialFeedback={feedback}
-        loadingLabel="登录中..."
-        onSubmit={signIn}
-        schema={loginSchema}
-        submitLabel="登录"
-      />
+      <LoginForm initialFeedback={feedback} />
     </AuthCard>
   );
 }
@@ -62,6 +36,10 @@ function resolveLoginFeedback(searchParams: {
 }) {
   if (searchParams.error === 'callback') {
     return { error: '邮箱验证回调失败，请重新登录后再试。' };
+  }
+
+  if (searchParams.error === 'signout') {
+    return { error: '退出登录失败，请重试。' };
   }
 
   if (searchParams.success === 'registered') {
