@@ -5,6 +5,7 @@ import type { ExchangeRates, Product } from '@/lib/calc/types';
 import { CalculatorProvider } from '@/contexts/calculator';
 import { CostInputPanel } from '@/components/calculator/CostInputPanel';
 import ProductManager from '@/components/calculator/ProductManager';
+import ResultPanel from '@/components/calculator/ResultPanel';
 import { TierSelector } from '@/components/calculator/TierSelector';
 
 interface CalculatorShellProps {
@@ -36,7 +37,7 @@ export default function CalculatorShell(props: CalculatorShellProps) {
             </div>
           </aside>
           <main className="flex-1 overflow-y-auto p-6 lg:max-h-[calc(100vh-3.5rem)]">
-            <p className="text-sm text-muted-foreground">Right Panel — Phase 5.4</p>
+            <ResultPanel />
           </main>
         </div>
       </div>
