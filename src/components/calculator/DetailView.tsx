@@ -39,7 +39,7 @@ export function DetailView() {
     >
       {isTier4 ? (
         <p
-          className="rounded-md border border-[color-mix(in_srgb,var(--color-warning)_40%,transparent)] bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] px-3 py-2 text-xs font-medium text-warning"
+          className="rounded-md border border-warning bg-warning-light px-3 py-2 text-xs font-medium text-warning"
           role="note"
         >
           营业额 &gt;4.5 亿，强制适用一般税制 (OSNO)

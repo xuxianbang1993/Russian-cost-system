@@ -1,9 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 
 vi.mock('recharts', () => ({
-  ResponsiveContainer: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="responsive-container">{children}</div>
+  ResponsiveContainer: ({
+    children,
+    initialDimension,
+    minWidth,
+  }: {
+    children: React.ReactNode;
+    initialDimension?: { width: number; height: number };
+    minWidth?: number | string;
+  }) => (
+    <div
+      data-initial-height={initialDimension?.height}
+      data-initial-width={initialDimension?.width}
+      data-min-width={minWidth}
+      data-testid="responsive-container"
+    >
+      {children}
+    </div>
   ),
   BarChart: ({
     children,
@@ -16,22 +31,42 @@ vi.mock('recharts', () => ({
       {children}
     </div>
   ),
-  Bar: ({ dataKey, fill }: { dataKey: string; fill: string }) => (
-    <span data-fill={fill} data-testid={`bar-${dataKey}`} />
+  Bar: ({
+    children,
+    dataKey,
+    fill,
+    isAnimationActive,
+  }: {
+    children?: React.ReactNode;
+    dataKey: string;
+    fill: string;
+    isAnimationActive?: boolean;
+  }) => (
+    <span
+      data-animation-active={String(isAnimationActive)}
+      data-fill={fill}
+      data-testid={`bar-${dataKey}`}
+    >
+      {children}
+    </span>
   ),
   CartesianGrid: () => null,
   XAxis: () => null,
   YAxis: () => null,
   Tooltip: () => null,
   Legend: () => null,
-  Cell: () => null,
+  Cell: ({ stroke, strokeWidth }: { stroke?: string; strokeWidth?: number }) => (
+    <i data-stroke={stroke} data-stroke-width={strokeWidth} data-testid="bar-cell" />
+  ),
 }));
 
 import {
+  ChartTooltip,
   TaxComparisonChart,
   buildChartData,
 } from '@/components/calculator/TaxComparisonChart';
 import { REVENUE_TIERS } from '@/lib/calc/engine';
+import { formatRUB } from '@/lib/utils';
 import type { CalculatorContextValue } from '@/contexts/calculator/types';
 import type {
   CalcOutput,
@@ -199,6 +234,124 @@ describe('TaxComparisonChart', () => {
         'data-fill',
         'var(--color-info)'
       );
+    });
+
+    it('sets stable ResponsiveContainer initial dimensions to avoid -1 size warning', () => {
+      mockContext = buildContext({
+        tier: REVENUE_TIERS[0]!,
+        results: [buildResult('usn6'), buildResult('usn15')],
+        recommended: 'usn6',
+        headShipping: 0,
+        platformFee: 0,
+        totalExpenses: 0,
+      });
+      render(<TaxComparisonChart />);
+      expect(screen.getByTestId('responsive-container')).toHaveAttribute(
+        'data-min-width',
+        '0'
+      );
+      expect(screen.getByTestId('responsive-container')).toHaveAttribute(
+        'data-initial-width',
+        '1'
+      );
+      expect(screen.getByTestId('responsive-container')).toHaveAttribute(
+        'data-initial-height',
+        '200'
+      );
+    });
+
+    it('keeps initial chart animation but disables it after data changes', () => {
+      vi.useFakeTimers();
+      mockContext = buildContext({
+        tier: REVENUE_TIERS[0]!,
+        results: [buildResult('usn6'), buildResult('usn15')],
+        recommended: 'usn6',
+        headShipping: 0,
+        platformFee: 0,
+        totalExpenses: 0,
+      });
+      const { rerender } = render(<TaxComparisonChart />);
+      expect(screen.getByTestId('bar-customsVat')).toHaveAttribute(
+        'data-animation-active',
+        'true'
+      );
+      act(() => {
+        vi.runAllTimers();
+      });
+
+      mockContext = buildContext({
+        tier: REVENUE_TIERS[0]!,
+        results: [
+          buildResult('usn6', { totalTax: 2_520_000 }),
+          buildResult('usn15', { totalTax: 3_120_000 }),
+        ],
+        recommended: 'usn6',
+        headShipping: 0,
+        platformFee: 0,
+        totalExpenses: 0,
+      });
+      rerender(<TaxComparisonChart />);
+      expect(screen.getByTestId('bar-customsVat')).toHaveAttribute(
+        'data-animation-active',
+        'false'
+      );
+      vi.useRealTimers();
+    });
+
+    it('adds success stroke cells for recommended bar segments only', () => {
+      mockContext = buildContext({
+        tier: REVENUE_TIERS[0]!,
+        results: [buildResult('usn6'), buildResult('usn15')],
+        recommended: 'usn15',
+        headShipping: 0,
+        platformFee: 0,
+        totalExpenses: 0,
+      });
+      render(<TaxComparisonChart />);
+      const strokedCells = screen
+        .getAllByTestId('bar-cell')
+        .filter((cell) => cell.getAttribute('data-stroke') === 'var(--color-success)');
+      expect(strokedCells).toHaveLength(3);
+      for (const cell of strokedCells) {
+        expect(cell).toHaveAttribute('data-stroke-width', '2');
+      }
+    });
+  });
+
+  describe('ChartTooltip', () => {
+    it('renders tax segment numbers, total tax, and net profit from the hovered chart row', () => {
+      const row = buildChartData(
+        [
+          buildResult('usn6', {
+            customsVat: 1_320_000,
+            incomeTax: 1_200_000,
+            additionalVat: 0,
+            totalTax: 2_520_000,
+            netProfit: 17_480_000,
+          }),
+        ],
+        'usn6'
+      )[0]!;
+
+      render(<ChartTooltip active payload={[{ payload: row }]} />);
+
+      expect(screen.getByText(row.regimeLabel)).toBeInTheDocument();
+      expect(screen.getByText((_, element) => element?.textContent === formatRUB(row.customsVat)))
+        .toBeInTheDocument();
+      expect(screen.getByText((_, element) => element?.textContent === formatRUB(row.incomeTax)))
+        .toBeInTheDocument();
+      expect(
+        screen.getByText((_, element) => element?.textContent === formatRUB(row.additionalVat))
+      ).toBeInTheDocument();
+      expect(screen.getByText((_, element) => element?.textContent === formatRUB(row.totalTax)))
+        .toBeInTheDocument();
+      expect(screen.getByText((_, element) => element?.textContent === formatRUB(row.netProfit)))
+        .toBeInTheDocument();
+    });
+
+    it('returns null when inactive or payload is empty', () => {
+      const { container } = render(<ChartTooltip active={false} payload={[]} />);
+      expect(container.firstChild).toBeNull();
     });
   });
 });

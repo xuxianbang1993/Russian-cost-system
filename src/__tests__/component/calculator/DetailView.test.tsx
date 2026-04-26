@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 
 vi.mock('recharts', () => ({
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => (
@@ -30,12 +30,14 @@ vi.mock('recharts', () => ({
 import { DetailView } from '@/components/calculator/DetailView';
 import { calculateTax, REVENUE_TIERS } from '@/lib/calc/engine';
 import type { CalculatorContextValue } from '@/contexts/calculator/types';
+import { formatPercent, formatRUB } from '@/lib/utils';
 import type {
   CalcInput,
   CalcOutput,
   ExchangeRates,
   Expenses,
   Product,
+  TaxRegimeId,
   TierId,
 } from '@/lib/calc/types';
 
@@ -106,6 +108,128 @@ function buildContext(
   };
 }
 
+interface GoldenCase {
+  name: string;
+  args: InputArgs;
+  regime: TaxRegimeId;
+  expected: {
+    customsVat: number;
+    incomeTax: number;
+    additionalVat: number;
+    totalTax: number;
+  };
+}
+
+const GOLDEN_CASES: GoldenCase[] = [
+  {
+    name: 'USN-6% tier1: revenue 2000万, declared cost 600万 → total tax 252万',
+    args: {
+      revenue: 20_000_000,
+      product: { declaredCost: 6_000_000 },
+    },
+    regime: 'usn6',
+    expected: {
+      customsVat: 1_320_000,
+      incomeTax: 1_200_000,
+      additionalVat: 0,
+      totalTax: 2_520_000,
+    },
+  },
+  {
+    name: 'USN-6% tier2: revenue 1亿, declared cost 3000万 → total tax 1736万',
+    args: {
+      revenue: 100_000_000,
+      tier: 'tier2',
+      product: { declaredCost: 30_000_000 },
+    },
+    regime: 'usn6',
+    expected: {
+      customsVat: 6_600_000,
+      incomeTax: 6_000_000,
+      additionalVat: 4_761_904.76,
+      totalTax: 17_361_904.76,
+    },
+  },
+  {
+    name: 'USN-6% tier3: revenue 3亿, declared cost 1亿 → total tax 5962万',
+    args: {
+      revenue: 300_000_000,
+      tier: 'tier3',
+      product: { declaredCost: 100_000_000 },
+    },
+    regime: 'usn6',
+    expected: {
+      customsVat: 22_000_000,
+      incomeTax: 18_000_000,
+      additionalVat: 19_626_168.22,
+      totalTax: 59_626_168.22,
+    },
+  },
+  {
+    name: 'USN-15% tier1: revenue 2000万, expenses 800万 → total tax 312万',
+    args: {
+      revenue: 20_000_000,
+      product: { declaredCost: 6_000_000 },
+      expenses: { procurement: 6_000_000, logistics: 1_000_000, advertising: 1_000_000 },
+    },
+    regime: 'usn15',
+    expected: {
+      customsVat: 1_320_000,
+      incomeTax: 1_800_000,
+      additionalVat: 0,
+      totalTax: 3_120_000,
+    },
+  },
+  {
+    name: 'USN-15% tier2: revenue 1亿, expenses 7000万 → total tax 1586万',
+    args: {
+      revenue: 100_000_000,
+      tier: 'tier2',
+      product: { declaredCost: 30_000_000 },
+      expenses: { procurement: 30_000_000, logistics: 20_000_000, advertising: 20_000_000 },
+    },
+    regime: 'usn15',
+    expected: {
+      customsVat: 6_600_000,
+      incomeTax: 4_500_000,
+      additionalVat: 4_761_904.76,
+      totalTax: 15_861_904.76,
+    },
+  },
+  {
+    name: 'OSNO: revenue 1亿, expenses 8000万, declared cost 5000万 → total tax 1870万',
+    args: {
+      revenue: 100_000_000,
+      tier: 'tier4',
+      product: { declaredCost: 50_000_000 },
+      expenses: { procurement: 80_000_000 },
+    },
+    regime: 'osno',
+    expected: {
+      customsVat: 11_000_000,
+      incomeTax: 4_098_360.66,
+      additionalVat: 3_606_557.38,
+      totalTax: 18_704_918.04,
+    },
+  },
+];
+
+function getTableCellText(rowLabel: string, regimeIndex: number): string {
+  const row = screen.getByRole('rowheader', { name: rowLabel }).closest('tr');
+  expect(row).not.toBeNull();
+  const cell = within(row!).getAllByRole('cell')[regimeIndex];
+  expect(cell).toBeDefined();
+  return cell!.textContent ?? '';
+}
+
+function expectTextContent(container: HTMLElement, expected: string) {
+  expect(
+    within(container).getByText(
+      (_, element) => element?.textContent === expected && element.children.length === 0
+    )
+  ).toBeInTheDocument();
+}
+
 describe('DetailView', () => {
   beforeEach(() => {
     mockContext = buildContext(null, null);
@@ -137,15 +261,16 @@ describe('DetailView', () => {
     const calcOutput = calculateTax(input);
     mockContext = buildContext(input.product, calcOutput);
     render(<DetailView />);
+    const kpiGroup = screen.getByRole('group', { name: '关键指标' });
     // KpiCards labels visible
-    expect(screen.getByText('利润率')).toBeInTheDocument();
-    expect(screen.getByText('总税额')).toBeInTheDocument();
-    expect(screen.getByText('净利润')).toBeInTheDocument();
+    expect(within(kpiGroup).getByText('利润率')).toBeInTheDocument();
+    expect(within(kpiGroup).getByText('总税额')).toBeInTheDocument();
+    expect(within(kpiGroup).getByText('净利润')).toBeInTheDocument();
     // Chart renders 2 bars (tier1)
     expect(screen.getByTestId('bar-chart')).toHaveAttribute('data-rowcount', '2');
     // Table has 4 row labels
     expect(screen.getByRole('rowheader', { name: '海关增值税' })).toBeInTheDocument();
-    expect(screen.getByRole('rowheader', { name: '总计' })).toBeInTheDocument();
+    expect(screen.getByRole('rowheader', { name: '总税' })).toBeInTheDocument();
     // No tier4 banner
     expect(screen.queryByRole('note')).not.toBeInTheDocument();
   });
@@ -160,7 +285,9 @@ describe('DetailView', () => {
     const calcOutput = calculateTax(input);
     mockContext = buildContext(input.product, calcOutput);
     render(<DetailView />);
-    expect(screen.getByRole('note').textContent).toMatch(/4\.5 亿.*OSNO/);
+    expect(screen.getByRole('note')).toHaveTextContent(
+      '营业额 >4.5 亿，强制适用一般税制 (OSNO)'
+    );
     expect(screen.getByTestId('bar-chart')).toHaveAttribute('data-rowcount', '1');
     // OSNO header in table
     expect(
@@ -186,7 +313,37 @@ describe('DetailView', () => {
     expect(usn6.netProfit).toBe(20_000_000 - 2_520_000);
     // KpiCards profitMargin shown (formatPercent recommended.profitMargin)
     const margin = (usn6.profitMargin * 100).toFixed(2);
-    expect(screen.getByText(`${margin}%`)).toBeInTheDocument();
+    const kpiGroup = screen.getByRole('group', { name: '关键指标' });
+    expect(within(kpiGroup).getByText(`${margin}%`)).toBeInTheDocument();
+  });
+
+  it.each(GOLDEN_CASES)('renders PRD-02 golden UI numbers: $name', ({ args, regime, expected }) => {
+    const input = buildInput(args);
+    const calcOutput = calculateTax(input);
+    const result = calcOutput.results.find((r) => r.regime === regime);
+    expect(result).toBeDefined();
+    expect(result!.customsVat).toBeCloseTo(expected.customsVat, 2);
+    expect(result!.incomeTax).toBeCloseTo(expected.incomeTax, 2);
+    expect(result!.additionalVat).toBeCloseTo(expected.additionalVat, 2);
+    expect(result!.totalTax).toBeCloseTo(expected.totalTax, 2);
+
+    mockContext = buildContext(input.product, calcOutput);
+    render(<DetailView />);
+
+    const regimeIndex = calcOutput.results.findIndex((r) => r.regime === regime);
+    expect(getTableCellText('海关增值税', regimeIndex)).toBe(formatRUB(expected.customsVat));
+    expect(getTableCellText('收入/利润/所得税', regimeIndex)).toBe(
+      formatRUB(expected.incomeTax)
+    );
+    expect(getTableCellText('附加增值税', regimeIndex)).toBe(formatRUB(expected.additionalVat));
+    expect(getTableCellText('总税', regimeIndex)).toBe(formatRUB(expected.totalTax));
+
+    if (calcOutput.recommended === regime) {
+      const kpiGroup = screen.getByRole('group', { name: '关键指标' });
+      expectTextContent(kpiGroup, formatRUB(result!.totalTax));
+      expectTextContent(kpiGroup, formatRUB(result!.netProfit));
+      expectTextContent(kpiGroup, formatPercent(result!.profitMargin));
+    }
   });
 
   it('uses semantic region role with aria-label "税制对比"', () => {

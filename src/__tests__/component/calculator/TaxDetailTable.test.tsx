@@ -3,6 +3,7 @@ import { render, screen, within } from '@testing-library/react';
 
 import { TaxDetailTable } from '@/components/calculator/TaxDetailTable';
 import { REVENUE_TIERS } from '@/lib/calc/engine';
+import { formatPercent, formatRUB } from '@/lib/utils';
 import type { CalculatorContextValue } from '@/contexts/calculator/types';
 import type { CalcOutput, TaxCalcResult, TaxRegimeId } from '@/lib/calc/types';
 
@@ -87,7 +88,7 @@ describe('TaxDetailTable', () => {
     expect(cols[1]).toHaveTextContent('一般税制');
   });
 
-  it('renders body row labels: 海关增值税 / 收入/利润税 / 附加增值税 / 总计', () => {
+  it('renders PRD-05 body rows: tax segments / total tax / rates / profit values', () => {
     mockContext = buildContext({
       tier: REVENUE_TIERS[0]!,
       results: [buildResult('usn6'), buildResult('usn15')],
@@ -98,9 +99,12 @@ describe('TaxDetailTable', () => {
     });
     render(<TaxDetailTable />);
     expect(screen.getByRole('rowheader', { name: '海关增值税' })).toBeInTheDocument();
-    expect(screen.getByRole('rowheader', { name: '收入/利润税' })).toBeInTheDocument();
+    expect(screen.getByRole('rowheader', { name: '收入/利润/所得税' })).toBeInTheDocument();
     expect(screen.getByRole('rowheader', { name: '附加增值税' })).toBeInTheDocument();
-    expect(screen.getByRole('rowheader', { name: '总计' })).toBeInTheDocument();
+    expect(screen.getByRole('rowheader', { name: '总税' })).toBeInTheDocument();
+    expect(screen.getByRole('rowheader', { name: '税负率' })).toBeInTheDocument();
+    expect(screen.getByRole('rowheader', { name: '净利润' })).toBeInTheDocument();
+    expect(screen.getByRole('rowheader', { name: '利润率' })).toBeInTheDocument();
   });
 
   it('marks recommended regime column header with bg-success-light + ⭐ prefix', () => {
@@ -118,7 +122,7 @@ describe('TaxDetailTable', () => {
     expect(usn15Header.textContent).toContain('⭐');
   });
 
-  it('renders 总计 row with font-bold class on label and cells', () => {
+  it('renders 总税 row with font-bold class on label and cells', () => {
     mockContext = buildContext({
       tier: REVENUE_TIERS[0]!,
       results: [buildResult('usn6', { totalTax: 2_520_000 })],
@@ -128,7 +132,7 @@ describe('TaxDetailTable', () => {
       totalExpenses: 0,
     });
     render(<TaxDetailTable />);
-    const totalRowHeader = screen.getByRole('rowheader', { name: '总计' });
+    const totalRowHeader = screen.getByRole('rowheader', { name: '总税' });
     expect(totalRowHeader).toHaveClass('font-bold');
     const totalRow = totalRowHeader.closest('tr')!;
     const totalCell = within(totalRow).getAllByRole('cell')[0];
@@ -163,5 +167,59 @@ describe('TaxDetailTable', () => {
     const customsRow = screen.getByRole('rowheader', { name: '海关增值税' }).closest('tr')!;
     const customsCell = within(customsRow).getAllByRole('cell')[0];
     expect(customsCell).toHaveClass('font-mono');
+  });
+
+  it('renders taxRate, netProfit, and profitMargin using PRD precision', () => {
+    mockContext = buildContext({
+      tier: REVENUE_TIERS[0]!,
+      results: [
+        buildResult('usn6', {
+          taxRate: 0.126,
+          netProfit: 17_480_000,
+          profitMargin: 0.874,
+        }),
+      ],
+      recommended: 'usn6',
+      headShipping: 0,
+      platformFee: 0,
+      totalExpenses: 0,
+    });
+    render(<TaxDetailTable />);
+    const taxRateRow = screen.getByRole('rowheader', { name: '税负率' }).closest('tr')!;
+    const netProfitRow = screen.getByRole('rowheader', { name: '净利润' }).closest('tr')!;
+    const profitMarginRow = screen.getByRole('rowheader', { name: '利润率' }).closest('tr')!;
+
+    expect(within(taxRateRow).getAllByRole('cell')[0]).toHaveTextContent(
+      formatPercent(0.126)
+    );
+    expect(within(netProfitRow).getAllByRole('cell')[0]?.textContent).toBe(
+      formatRUB(17_480_000)
+    );
+    expect(within(profitMarginRow).getAllByRole('cell')[0]).toHaveTextContent(
+      formatPercent(0.874)
+    );
+  });
+
+  it('renders 总税 as the displayed sum of the three tax segment rows within ±0.01', () => {
+    mockContext = buildContext({
+      tier: REVENUE_TIERS[0]!,
+      results: [
+        buildResult('usn6', {
+          customsVat: 1_320_000.12,
+          incomeTax: 1_200_000.23,
+          additionalVat: 0.34,
+          totalTax: 999,
+        }),
+      ],
+      recommended: 'usn6',
+      headShipping: 0,
+      platformFee: 0,
+      totalExpenses: 0,
+    });
+    render(<TaxDetailTable />);
+    const totalRow = screen.getByRole('rowheader', { name: '总税' }).closest('tr')!;
+    const displayedTotal = within(totalRow).getAllByRole('cell')[0];
+    const expectedTotal = 1_320_000.12 + 1_200_000.23 + 0.34;
+    expect(displayedTotal?.textContent).toBe(formatRUB(expectedTotal));
   });
 });

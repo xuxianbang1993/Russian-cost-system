@@ -1,9 +1,11 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -38,6 +40,9 @@ const SEGMENT_COLORS = {
   additionalVat: 'var(--color-info)',
 } as const;
 
+const RECOMMENDED_STROKE = 'var(--color-success)';
+const CHART_INITIAL_DIMENSION = { width: 1, height: 200 };
+
 export function buildChartData(
   results: TaxCalcResult[],
   recommended: TaxRegimeId
@@ -60,9 +65,10 @@ interface ChartTooltipProps {
   payload?: Array<{ payload: ChartRow }>;
 }
 
-function ChartTooltip(props: ChartTooltipProps) {
+export function ChartTooltip(props: ChartTooltipProps) {
   if (!props.active || !props.payload || props.payload.length === 0) return null;
-  const row = props.payload[0]!.payload;
+  const row = props.payload[0]?.payload;
+  if (!row) return null;
   return (
     <div className="min-w-[200px] rounded-[10px] border border-border bg-surface p-3 text-xs shadow-[var(--shadow-md)]">
       <p className="mb-2 font-semibold text-foreground">{row.regimeLabel}</p>
@@ -92,6 +98,13 @@ function ChartTooltip(props: ChartTooltipProps) {
 
 export function TaxComparisonChart() {
   const { calcOutput } = useCalculatorContext();
+  const [shouldAnimate, setShouldAnimate] = useState(true);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setShouldAnimate(false), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   if (!calcOutput || calcOutput.results.length === 0) return null;
 
   const chartData = buildChartData(calcOutput.results, calcOutput.recommended);
@@ -99,11 +112,16 @@ export function TaxComparisonChart() {
   return (
     <div
       aria-label="税制对比柱状图"
-      className="h-[clamp(200px,30vw,240px)] w-full"
+      className="h-[clamp(200px,30vw,240px)] min-w-0 w-full"
       data-testid="tax-comparison-chart"
       role="img"
     >
-      <ResponsiveContainer height="100%" width="100%">
+      <ResponsiveContainer
+        height="100%"
+        initialDimension={CHART_INITIAL_DIMENSION}
+        minWidth={0}
+        width="100%"
+      >
         <BarChart
           data={chartData}
           margin={{ top: 24, right: 16, bottom: 8, left: 16 }}
@@ -126,24 +144,48 @@ export function TaxComparisonChart() {
           <Bar
             dataKey="customsVat"
             fill={SEGMENT_COLORS.customsVat}
-            isAnimationActive={false}
+            isAnimationActive={shouldAnimate}
             name={SEGMENT_LABELS.customsVat}
             stackId="a"
-          />
+          >
+            {chartData.map((row) => (
+              <Cell
+                key={`${row.regime}-customsVat`}
+                stroke={row.isRecommended ? RECOMMENDED_STROKE : 'transparent'}
+                strokeWidth={row.isRecommended ? 2 : 0}
+              />
+            ))}
+          </Bar>
           <Bar
             dataKey="incomeTax"
             fill={SEGMENT_COLORS.incomeTax}
-            isAnimationActive={false}
+            isAnimationActive={shouldAnimate}
             name={SEGMENT_LABELS.incomeTax}
             stackId="a"
-          />
+          >
+            {chartData.map((row) => (
+              <Cell
+                key={`${row.regime}-incomeTax`}
+                stroke={row.isRecommended ? RECOMMENDED_STROKE : 'transparent'}
+                strokeWidth={row.isRecommended ? 2 : 0}
+              />
+            ))}
+          </Bar>
           <Bar
             dataKey="additionalVat"
             fill={SEGMENT_COLORS.additionalVat}
-            isAnimationActive={false}
+            isAnimationActive={shouldAnimate}
             name={SEGMENT_LABELS.additionalVat}
             stackId="a"
-          />
+          >
+            {chartData.map((row) => (
+              <Cell
+                key={`${row.regime}-additionalVat`}
+                stroke={row.isRecommended ? RECOMMENDED_STROKE : 'transparent'}
+                strokeWidth={row.isRecommended ? 2 : 0}
+              />
+            ))}
+          </Bar>
         </BarChart>
       </ResponsiveContainer>
     </div>

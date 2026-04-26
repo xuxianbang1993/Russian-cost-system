@@ -9,14 +9,13 @@ interface KpiCardProps {
 
 export function KpiCard(props: KpiCardProps) {
   return (
-    <div className="rounded-[14px] border border-border bg-surface p-5 shadow-[var(--shadow-sm)]">
-      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-tertiary">
+    <div className="rounded-lg border border-border bg-surface p-5 shadow-[var(--shadow-sm)]">
+      <p className="text-xs font-semibold uppercase tracking-normal text-tertiary">
         {props.label}
       </p>
       <p
         className={cn(
-          'mt-2 truncate font-mono font-bold tabular-nums tracking-[-0.02em]',
-          'text-[clamp(20px,4vw,32px)] leading-tight',
+          'mt-2 truncate font-mono text-3xl font-bold leading-tight tracking-normal tabular-nums',
           props.valueClassName
         )}
       >
