@@ -614,6 +614,28 @@ pnpm test:run           # 所有测试通过
 
 三项全部通过才允许 commit。
 
+### 6.4 长批次开发模式（5.4-5.7 等多 phase 一次性交付）
+
+当多个相邻 phase 的功能强耦合、需要一次性交付时，采用**父-子分支模式**：
+
+```
+main
+└── dev
+    └── feat/step-5-4-to-5-7-tax-views (父分支，长寿)
+        ├── feat/step-5-4-tax-compare    → 子 PR 进父分支
+        ├── feat/step-5-5-compare-batch  → 子 PR 进父分支
+        ├── feat/step-5-6-save-history   → 子 PR 进父分支
+        └── feat/step-5-7-ux-polish      → 子 PR 进父分支
+```
+
+规则：
+- 父分支只接受子分支的 squash merge，**不**直接接受 commit（除 commit-0 策略文档）
+- 每个子分支独立通过 §6.3 的提交前检查 + Subagent 团队 review（见 §11）
+- 子分支合入父分支后立即推送父分支同步进度
+- 全部子 phase 完成后，父分支整体 PR 进 dev → main，发版 v0.X.0
+- 任一子 phase 设计需要回炉，**只回退该子分支**，父分支保持稳定
+- 长批次完成 PR 之前，必须经过 §11.4 场景 B 的 Codex 终审
+
 ---
 
 ## 七、财务数字处理红线
@@ -724,6 +746,9 @@ pnpm test:run           # 所有测试通过
 
 ## 九、Codex 专用指令
 
+> **范围**：本节适用于通过 `/ask codex`（ccb 外部 provider）派工的场景。
+> Claude Code **内置 subagent** 团队协作请参考 §11，主流程优先内置 subagent。
+
 当使用 Codex 执行时，必须在 prompt 中包含以下约束：
 
 ```
@@ -746,3 +771,86 @@ pnpm test:run           # 所有测试通过
 - 每完成一个 Step，更新对应的检查清单（□ → ✓）
 - 发现需要调整的规则，必须先征求用户同意，不擅自修改
 - 每次新会话开始时，必须先读取本文件和 checkpoint
+
+---
+
+## 十一、Subagent 团队协作 SOP（Claude Code 内置 Agent 工具）
+
+### 11.1 团队架构（核心 3 + 按需 5）
+
+主线 Claude（designer + executor）派工以下 subagent 形成"虚拟团队"：
+
+| 角色 | subagent_type | 模型 | 何时调用 |
+|---|---|---|---|
+| **Planner** 计划员 | `Plan` | Sonnet | Phase 启动：把 PRD 翻译为可执行 SPEC |
+| **Reviewer** 审查员 | `superpowers:code-reviewer` | 全能 | Phase 收尾：综合 code review |
+| **QA** 质检员 | `quality-checker` | Haiku | Phase 验收：跑 tsc/lint/test，给 pass/fail |
+| **Architect** 架构师 | `architect` | Opus | 引入新依赖、状态管理、关键设计抉择 |
+| **Explorer** 探索员 | `Explore` | Sonnet | 不熟悉现有代码时的快速摸底 |
+| **Failure Hunter** | `pr-review-toolkit:silent-failure-hunter` | 全能 | 写完错误处理逻辑后 |
+| **Test Analyzer** | `pr-review-toolkit:pr-test-analyzer` | 全能 | 写完测试后审查覆盖度 |
+| **Doc Validator** | `doc-validator` | Haiku | PRD 与代码一致性检查 |
+
+> **核心 3 人**（Planner / Reviewer / QA）是每 phase 必跑的最小团队。
+> **按需 5 人** 根据 phase 内容由主线 Claude 动态调用。
+
+### 11.2 每个 phase 的 5 步 SOP
+
+```
+STEP 1  主线 Claude 读 PRD-0X，切子分支 feat/step-5-X-xxx
+
+STEP 2  Agent: Plan
+        输入：PRD-0X + 现有代码上下文
+        输出：SPEC（实施步骤 / 文件清单 / 测试计划）
+        ↓ 用户确认 SPEC
+
+STEP 3  主线 Claude 串行执行 SPEC（写代码 / 跑 vitest / 调试）
+        不熟悉时随时派 Explore / Architect 子 agent
+
+STEP 4  三把刀并行审查（同一消息内多 Agent 调用）
+        ① superpowers:code-reviewer
+        ② pr-review-toolkit:silent-failure-hunter（如涉及错误处理）
+        ③ quality-checker
+        ↓ 整合反馈
+
+STEP 5  主线 Claude 修 bug → 二审 → commit
+        二审失败 ≥3 轮则上报用户
+```
+
+### 11.3 联网搜索降级链（遇到不懂时）
+
+按以下顺序尝试，前者失败才用后者：
+1. **WebSearch**（首选）
+2. **WebFetch**（已知具体 URL 时）
+3. **Agent Reach**（mcporter `exa.web_search_exa` / `curl r.jina.ai`）
+4. **`/ask gemini`**（最后兜底，需要外部独立视角时）
+
+### 11.4 ccb 外部 provider（备用，但有两个固定场景）
+
+主流程不依赖 ccb，但以下两种情况**必须**调用：
+
+**场景 A：重大架构决策需要独立判断**
+- 引入新依赖、改变状态管理、修改 engine 等关键决策
+- 派工：`/ask codex`（按 §9 携带项目约束）→ 拿独立判断
+- 与内置 `architect` subagent 形成"双盲审"
+
+**场景 B：长批次（多 phase 一次性交付）的整体集成审查 + bug 测试**
+- 触发时机：所有 phase 子分支已合入父分支后、父分支 PR 进 dev 之前
+- 派工方式：`/ask codex` 提交完整 `git diff main...feat/step-5-X-to-5-Y-...` + 涉及的 PRD 清单
+- Codex 必须执行的全套清单：
+  - ① **整体架构 review**：组件耦合 / 数据流 / 命名一致性
+  - ② **Bug 测试**：手工跑场景 + 找 race condition / null 溢出 / 边界值漏洞
+  - ③ **PRD 一致性核对**：每个 PRD 的 MUST HAVE 清单逐项对照
+  - ④ **性能审查**：渲染帧数 / 计算引擎调用频次 / 不必要的 re-render
+  - ⑤ **安全审查**：RLS 双层 / Server Action userId 过滤 / IDOR
+- Codex 输出：JSON 评分（按 AGENTS.md Rubrics）+ 问题清单
+- 用户把 Codex 反馈转发给主线 Claude → Claude 修 → 再审（最多 3 轮）→ 通过后才允许 PR
+
+### 11.5 团队禁忌
+
+- ❌ 跳过 Plan 直接写 IMPL（除非是 ≤10 行的 fix）
+- ❌ 同一 phase 三审都不过却不上报用户
+- ❌ 在主线 Claude 上下文 review 自己的代码（必须派 subagent）
+- ❌ subagent 写代码——subagent 角色是 read + recommend；写入落地由主线 Claude 完成
+- ❌ Plan/Architect 给的方案与 PRD 冲突时硬上——必须先回 PRD 找答案或上报用户
+- ❌ 长批次完成跳过 §11.4 场景 B 的 Codex 终审直接 PR
