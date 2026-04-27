@@ -17,7 +17,8 @@ export interface CalculatorState {
   expenses: Expenses;
   rates: ExchangeRates;
   activeView: ViewId;
-  batchQuantity: number;
+  batchMin: number;
+  batchMax: number;
   revenue: number;
 }
 
@@ -30,7 +31,7 @@ export type CalculatorAction =
   | { type: 'SET_EXPENSES'; expenses: Partial<Expenses> }
   | { type: 'SET_RATES'; rates: Partial<ExchangeRates> }
   | { type: 'SET_VIEW'; view: ViewId }
-  | { type: 'SET_BATCH_QUANTITY'; quantity: number }
+  | { type: 'SET_BATCH_RANGE'; min: number; max: number }
   | { type: 'SET_REVENUE'; revenue: number }
   | { type: 'INIT'; products: Product[]; rates: ExchangeRates };
 

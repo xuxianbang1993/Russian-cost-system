@@ -152,18 +152,44 @@ describe('calculatorReducer', () => {
     expect(state.activeView).toBe('compare');
   });
 
-  it('SET_BATCH_QUANTITY 与 SET_REVENUE 更新批量数量和营业额', () => {
-    const withQuantity = calculatorReducer(makeState(), {
-      type: 'SET_BATCH_QUANTITY',
-      quantity: 24,
+  it('SET_BATCH_RANGE 与 SET_REVENUE 更新批量范围和营业额', () => {
+    const withRange = calculatorReducer(makeState(), {
+      type: 'SET_BATCH_RANGE',
+      min: 100_000_000,
+      max: 500_000_000,
     });
-    const withRevenue = calculatorReducer(withQuantity, {
+    const withRevenue = calculatorReducer(withRange, {
       type: 'SET_REVENUE',
       revenue: 32_000_000,
     });
 
-    expect(withRevenue.batchQuantity).toBe(24);
+    expect(withRevenue.batchMin).toBe(100_000_000);
+    expect(withRevenue.batchMax).toBe(500_000_000);
     expect(withRevenue.revenue).toBe(32_000_000);
+  });
+
+  it('createInitialState 默认 batchMin=0 / batchMax=250_000_000（tier1）', () => {
+    const initial = createInitialState();
+
+    expect(initial.tierId).toBe('tier1');
+    expect(initial.batchMin).toBe(0);
+    expect(initial.batchMax).toBe(250_000_000);
+  });
+
+  it('SET_TIER 不重置已编辑的 batchMin/batchMax（B 决策，PRD-07 §6.2 依据）', () => {
+    const edited = calculatorReducer(makeState(), {
+      type: 'SET_BATCH_RANGE',
+      min: 100_000_000,
+      max: 500_000_000,
+    });
+    const switched = calculatorReducer(edited, {
+      type: 'SET_TIER',
+      tierId: 'tier4',
+    });
+
+    expect(switched.tierId).toBe('tier4');
+    expect(switched.batchMin).toBe(100_000_000);
+    expect(switched.batchMax).toBe(500_000_000);
   });
 
   it('INIT 空商品数组时 currentProductId 为 null', () => {

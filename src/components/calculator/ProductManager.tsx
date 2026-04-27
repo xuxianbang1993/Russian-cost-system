@@ -77,7 +77,7 @@ export function ProductManager() {
   }
 
   return (
-    <section className="space-y-3">
+    <section className="space-y-3" id="product-manager">
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1">
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-tertiary">商品</p>
