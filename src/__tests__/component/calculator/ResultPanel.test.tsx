@@ -12,6 +12,13 @@ vi.mock('recharts', () => ({
   Bar: ({ children, dataKey }: { children?: React.ReactNode; dataKey: string }) => (
     <span data-testid={`bar-${dataKey}`}>{children}</span>
   ),
+  LineChart: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="line-chart">{children}</div>
+  ),
+  Line: ({ dataKey }: { dataKey: string }) => (
+    <span data-testid={`line-${dataKey}`} />
+  ),
+  ReferenceLine: () => null,
   CartesianGrid: () => null,
   XAxis: () => null,
   YAxis: () => null,
@@ -61,11 +68,11 @@ describe('ResultPanel', () => {
     renderWithProvider();
 
     await user.click(screen.getByRole('button', { name: '多品对比' }));
-    expect(screen.getByText('CompareView - 待实现')).toBeInTheDocument();
+    expect(screen.getByText(/多品对比需要至少 2 个商品/)).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: '税制对比' })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '批量模拟' }));
-    expect(screen.getByText('BatchSimulation - 待实现')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '批量销量模拟' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '单品详情' }));
     expect(screen.getByRole('region', { name: '税制对比' })).toBeInTheDocument();

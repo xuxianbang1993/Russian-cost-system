@@ -1,3 +1,4 @@
+import { getDefaultBatchRange } from '@/lib/calc/sample';
 import type { ExchangeRates, Expenses, Product } from '@/lib/calc/types';
 
 import type { CalculatorAction, CalculatorState } from '@/contexts/calculator/types';
@@ -19,6 +20,7 @@ export function createInitialState(
   products: Product[] = [],
   rates: ExchangeRates = DEFAULT_RATES
 ): CalculatorState {
+  const defaultRange = getDefaultBatchRange('tier1');
   return {
     tierId: 'tier1',
     products,
@@ -26,7 +28,8 @@ export function createInitialState(
     expenses: DEFAULT_EXPENSES,
     rates,
     activeView: 'detail',
-    batchQuantity: 1,
+    batchMin: defaultRange.min,
+    batchMax: defaultRange.max,
     revenue: 20_000_000,
   };
 }
@@ -106,7 +109,7 @@ export function calculatorReducer(
     case 'SET_EXPENSES': return mergeExpenses(state, action.expenses);
     case 'SET_RATES': return mergeRates(state, action.rates);
     case 'SET_VIEW': return { ...state, activeView: action.view };
-    case 'SET_BATCH_QUANTITY': return { ...state, batchQuantity: action.quantity };
+    case 'SET_BATCH_RANGE': return { ...state, batchMin: action.min, batchMax: action.max };
     case 'SET_REVENUE': return { ...state, revenue: action.revenue };
     default:
       return state;
