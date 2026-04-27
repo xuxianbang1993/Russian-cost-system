@@ -806,6 +806,7 @@ STEP 2  Agent: Plan
 
 STEP 3  主线 Claude 串行执行 SPEC（写代码 / 跑 vitest / 调试）
         不熟悉时随时派 Explore / Architect 子 agent
+        ⚠️ 触发 §11.4 场景 C 时：先做 C1 SPEC 审，再写代码
 
 STEP 4  三把刀并行审查（同一消息内多 Agent 调用）
         ① superpowers:code-reviewer
@@ -846,6 +847,32 @@ STEP 5  主线 Claude 修 bug → 二审 → commit
 - Codex 输出：JSON 评分（按 AGENTS.md Rubrics）+ 问题清单
 - 用户把 Codex 反馈转发给主线 Claude → Claude 修 → 再审（最多 3 轮）→ 通过后才允许 PR
 
+**场景 C：单 phase 双审（"主线写 + Codex 双审"模式）**
+
+触发条件（任一即触发）：
+- 用户在 phase 启动时主动要求
+- phase 涉及核心业务逻辑（计算引擎 / 认证 / 财务数字 / Server Actions 安全边界）
+- phase 预计 ≥500 行新代码 / 跨 5+ 文件
+
+派工节点（**两次都必须做**）：
+
+- **C1：SPEC 审**（在 §11.2 STEP 2 之后、STEP 3 之前）
+  - Plan agent 输出 SPEC.md → 主线 Claude 用 `/ask codex` 提交：SPEC 全文 + PRD 摘要 + 当前代码上下文
+  - Codex 审查维度：方案完整性 / PRD 一致性 / 架构风险 / 测试覆盖度
+  - Codex 输出 JSON 评分（按 AGENTS.md Rubrics）+ 问题清单
+  - 用户转发反馈 → 主线 Claude 修订 SPEC v2 → 用户批准 v2 → 进 STEP 3
+
+- **C2：phase 终审**（在 §11.2 STEP 4 三把刀通过后、commit 之前）
+  - 主线 Claude 用 `/ask codex` 提交：完整 `git diff` + PRD MUST HAVE 对照清单 + 测试结果
+  - Codex 审查维度：与 §11.4 场景 B 的 5 项相同（架构 / Bug / PRD / 性能 / 安全）
+  - 用户转发反馈 → 主线 Claude 修 → 二审（最多 3 轮）→ 通过后才 commit
+
+与 CLAUDE.md "代码生成必须调用 Codex" 的关系：
+- 场景 C 适用时，**主线 Claude 写代码主体 + Codex 双审 ≡ "派 Codex 写"的纪律效果**（双审等价于事前审查）
+- 场景 C 不适用时，CLAUDE.md 全局规则生效——>10 行的纯实现任务仍派 Codex 写
+
+与场景 B 的区别：场景 B 是"长批次完成 PR 前的整体终审"，场景 C 是"单 phase 内部双审"——两者可叠加（5.5 用 C，5.4-5.7 全完成后再用 B）。
+
 ### 11.5 团队禁忌
 
 - ❌ 跳过 Plan 直接写 IMPL（除非是 ≤10 行的 fix）
@@ -854,3 +881,4 @@ STEP 5  主线 Claude 修 bug → 二审 → commit
 - ❌ subagent 写代码——subagent 角色是 read + recommend；写入落地由主线 Claude 完成
 - ❌ Plan/Architect 给的方案与 PRD 冲突时硬上——必须先回 PRD 找答案或上报用户
 - ❌ 长批次完成跳过 §11.4 场景 B 的 Codex 终审直接 PR
+- ❌ 触发场景 C 但只做了一次审（C1 + C2 必须都做）
